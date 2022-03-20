@@ -1,0 +1,8 @@
+[{<<"quicer">>,
+  {git,"https://github.com/emqx/quic.git",
+       {ref,"0742e6dde38a09cd7fb9461d6c0db051938c7939"}},
+  0},
+ {<<"snabbkaffe">>,
+  {git,"https://github.com/kafka4beam/snabbkaffe.git",
+       {ref,"f87ef591068f1fd1689b942ca7126e7a9c2698cd"}},
+  1}].
