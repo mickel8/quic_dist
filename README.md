@@ -6,8 +6,22 @@ Erlang Distibution Protocol basing on QUIC.
     $ rebar3 compile
 
 ## Test
-    $ ERL_FLAGS="-proto_dist quic -no_epmd" rebar3 shell
-    1> net_kernel:start([bing, shortnames]).
+
+```
+# shell 1
+
+$ ERL_FLAGS="-proto_dist quic -no_epmd" rebar3 shell
+1> net_kernel:start([node1, shortnames]).
+```
+
+```
+# shell 2
+
+$ ERL_FLAGS="-proto_dist quic -no_epmd" rebar3 shell
+1> net_kernel:start([node2, shortnames]).
+
+(node2@michal)2> net_adm:ping(node1@michal)
+```
 
 ## Resources
 

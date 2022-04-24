@@ -5,19 +5,27 @@
 
 -include_lib("kernel/include/net_address.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("kernel/include/dist_util.hrl").
 
 listen(Name) ->
     {ok, Host} = inet:gethostname(),
     listen(Name, Host).
 
 listen(Name, Host) ->
-    ?LOG_INFO("Ping"),
-    erlang:display("Ping"),
+    ?LOG_DEBUG("Starting listening"),
     application:ensure_all_started(quicer),
-    {MinPort, _MaxPort} = get_port_range(),
+    {_MinPort, _MaxPort} = get_port_range(),
     LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}],
-    {ok, L} = quicer:listen(MinPort, LOptions),
-    {ok, {Address, _Port}} = quicer:sockname(L),
+    
+    {ok, L} =
+    if Name == 'x' ->
+        quicer:listen("127.0.0.1:55555", LOptions);
+    true ->
+        quicer:listen("127.0.0.2:55555", LOptions)
+    end,
+
+    {ok, {Address, Port}} = quicer:sockname(L),
+    ?LOG_DEBUG("Listening on ~p:~p", [Address, Port]),
     NetAddress =
         #net_address{address = Address,
                      host = Host,
@@ -30,16 +38,29 @@ get_port_range() ->
     {50000, 60000}.
 
 address() ->
-    ok.
+    {ok, Host} = inet:gethostname(),
+    % address field has to remain unset as
+    % we are not creating socket here
+    #net_address{host = Host,
+                 protocol = udp,
+                 family = inet}.
 
-accept(_Listen) ->
-    ok.
+accept(Listen) ->
+    % priority max is enforced by Erlang documentation
+    ?LOG_DEBUG("Spawning Acceptor"),
+    spawn_opt(quic_acceptor, acceptor_loop, [self(), Listen], [link, {priority, max}]).
 
-accept_connection(_AcceptorPid, _DistCtrl, _MyNode, _Allowed, _SetupTime) ->
-    ok.
+accept_connection(AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime) ->
+    spawn_opt(quic_supervisor,
+              supervisor_loop,
+              [self(), AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime],
+              [link, {priority, max}]).
 
-setup(_Node, _Type, _MyNode, _LongOrShortNames, _SetupTime) ->
-    ok.
+setup(Node, Type, MyNode, LongOrShortNames, SetupTime) ->
+    spawn_opt(quic_connector,
+              connector_loop,
+              [self(), Node, Type, MyNode, LongOrShortNames, SetupTime],
+              [link, {priority, max}]).
 
 close(_Listen) ->
     ok.
