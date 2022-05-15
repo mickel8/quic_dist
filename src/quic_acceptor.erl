@@ -13,6 +13,8 @@ acceptor_loop(Kernel, Listen) ->
             ?LOG_DEBUG("Performing QUIC handshake"),
             {ok, Stream} = quicer:accept_stream(Conn, []),
             ?LOG_DEBUG("Accepting stream"),
+            receive {quic, <<"ping">>, Stream, _, _, _} -> ok end,
+            {ok, 4} = quicer:send(Stream, <<"pong">>),
             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
             quicer:controlling_process(Conn, DistCtrl),
             Kernel ! {accept, self(), DistCtrl, inet, udp},

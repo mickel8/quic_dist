@@ -19,7 +19,7 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                 true ->
                     {127, 0, 0, 2}
                 end,
-            Port = 50000,
+            Port = 55555,
             Timer = dist_util:start_timer(SetupTime),
             case true of
                 true  ->
@@ -29,6 +29,8 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                         {ok, Conn} ->
                             ?LOG_DEBUG("Connected. Creating stream"),
                             {ok, Stream} = quicer:start_stream(Conn, []),
+                            {ok, 4} = quicer:send(Stream, <<"ping">>),
+                            receive {quic, <<"pong">>, Stream, _, _, _} -> ok end,
                             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
                             quicer:controlling_process(Stream, DistCtrl),
                             HSData0 = quic_util:hs_data_common(DistCtrl),

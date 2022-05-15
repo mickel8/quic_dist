@@ -13,13 +13,13 @@
         [{message_queue_data, off_heap}, {fullsweep_after, 0}]).
 
 spawn_dist_cntrlr(Stream) ->
+    ?LOG_DEBUG("Running DistCntrlr loop"),
     spawn_opt(quic_dist_cntrlr,
               dist_cntrlr_loop,
               [Stream],
               [{priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS).
 
 dist_cntrlr_loop(Stream) ->
-    ?LOG_DEBUG("Running DistCntrlr loop"),
     receive
         {Ref, From, {supervisor, SupervisorPid}} ->
             Res = link(SupervisorPid),
