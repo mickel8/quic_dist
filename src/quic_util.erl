@@ -17,7 +17,7 @@ call_dist_ctrl(DistCtrl, Msg) ->
 
 hs_data_common(DistCtrl) ->
     TickHandler = call_dist_ctrl(DistCtrl, tick_handler),
-    Socket = call_dist_ctrl(DistCtrl, socket),
+    Stream = call_dist_ctrl(DistCtrl, stream),
     RejectFlags =
         case init:get_argument(quic_dist_reject_flags) of
             {ok, [[Flags]]} ->
@@ -32,9 +32,9 @@ hs_data_common(DistCtrl) ->
              f_getll = getll_fun(),
              f_handshake_complete = handshake_complete_fun(),
              f_address = address_fun(),
-             mf_setopts = setopts_fun(DistCtrl, Socket),
-             mf_getopts = getopts_fun(DistCtrl, Socket),
-             mf_getstat = getstat_fun(DistCtrl, Socket),
+             mf_setopts = setopts_fun(DistCtrl, Stream),
+             mf_getopts = getopts_fun(DistCtrl, Stream),
+             mf_getstat = getstat_fun(DistCtrl, Stream),
              mf_tick = tick_fun(DistCtrl, TickHandler),
              reject_flags = RejectFlags}.
 
