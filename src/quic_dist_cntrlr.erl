@@ -43,17 +43,24 @@ dist_cntrlr_loop(Stream, TickHandler) ->
         
         %% Send Packet onto the stream and send the result back
         {Ref, From, {send, Packet}} ->
-            ?LOG_DEBUG("[DIST] Sending"),
+            ?LOG_DEBUG("~s ~p", ["[DIST] Sending", Packet]),
             Res = quicer:send(Stream, Packet),
+            ?LOG_DEBUG("~s ~p", ["[DIST] Sent", Res]),
             From ! {Ref, Res},
             dist_cntrlr_loop(Stream, TickHandler);
 
         %% Receive a packet of Length bytes, within Timeout milliseconds
         {Ref, From, {recv, Length, Timeout}} ->
-            ?LOG_DEBUG("~s ~p", ["[DIST] Receiving", Length]),
-            %% TODO use Timeout
-            {ok, Res} = quicer:recv(Stream, Length),
-            From ! {Ref, Res},
+            ?LOG_DEBUG("~s ~p ~p", ["[DIST] Receiving", Length, Timeout]),
+            % TODO use Timeout
+            ?LOG_DEBUG("~s ~p", ["process", process_info(self(), messages)]),
+            receive
+                {quic, Msg, _, _, _, _} ->
+                    ?LOG_DEBUG("~s ~p", ["[DIST] Received", Msg]),
+                    From ! {Ref, Msg};
+                Other ->
+                    ?LOG_DEBUG("~s, ~p", ["OTHER", Other])
+            end,
             dist_cntrlr_loop(Stream, TickHandler);
         
         {Ref, From, {handshake_complete, _Node, _DHandle}} ->
@@ -74,7 +81,8 @@ tick_handler(Stream) ->
     receive
         tick ->
             %% May block due to busy port...
-            quicer:send(Stream, "");
+            Res = quicer:send(Stream, ""),
+            ?LOG_DEBUG("~s, ~p", ["Sent tick", Res]);
         _ ->
             ok
     end,

@@ -3,6 +3,7 @@
 -export([call_dist_ctrl/2, hs_data_common/1]).
 
 -include_lib("kernel/include/dist_util.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 call_dist_ctrl(DistCtrl, Msg) ->
     Ref = erlang:monitor(process, DistCtrl),
@@ -16,8 +17,11 @@ call_dist_ctrl(DistCtrl, Msg) ->
     end.
 
 hs_data_common(DistCtrl) ->
+    ?LOG_DEBUG("hs data common"),
     TickHandler = call_dist_ctrl(DistCtrl, tick_handler),
+    ?LOG_DEBUG("Got tick handler"),
     Stream = call_dist_ctrl(DistCtrl, stream),
+    ?LOG_DEBUG("Got stream"),
     RejectFlags =
         case init:get_argument(quic_dist_reject_flags) of
             {ok, [[Flags]]} ->
