@@ -17,11 +17,11 @@ call_dist_ctrl(DistCtrl, Msg) ->
     end.
 
 hs_data_common(DistCtrl) ->
-    ?LOG_DEBUG("hs data common"),
+    erlang:display("hs data common"),
     TickHandler = call_dist_ctrl(DistCtrl, tick_handler),
-    ?LOG_DEBUG("Got tick handler"),
+    erlang:display("Got tick handler"),
     Stream = call_dist_ctrl(DistCtrl, stream),
-    ?LOG_DEBUG("Got stream"),
+    erlang:display("Got stream"),
     RejectFlags =
         case init:get_argument(quic_dist_reject_flags) of
             {ok, [[Flags]]} ->
@@ -89,7 +89,9 @@ recv_fun() ->
     fun(Ctrlr, Length, Timeout) ->
        case call_dist_ctrl(Ctrlr, {recv, Length, Timeout}) of
            {ok, Bin} when is_binary(Bin) ->
-               {ok, binary_to_list(Bin)};
+               X = {ok, binary_to_list(Bin)},
+               erlang:display(X),
+                X;
            Other ->
                Other
        end

@@ -20,9 +20,9 @@
 -import(error_logger, [error_msg/2]).
 
 connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
-    ?LOG_DEBUG("Starting connector loop", []),
+    erlang:display("Starting connector loop"),
     [Name, Address] = splitnode(Node, LongOrShortNames),
-    ?LOG_DEBUG("After splitnode", []),
+    erlang:display("After splitnode"),
     case inet:getaddr(Address, inet) of
         {ok, _Ip} ->
             Ip2 = 
@@ -36,18 +36,18 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
             case true of
                 true  ->
                     dist_util:reset_timer(Timer),
-                    ?LOG_DEBUG("Connecting to ~p:~p", [Ip2, Port]),
+                    % erlang:display("Connecting to ~p:~p", [Ip2, Port]),
                     case quicer:connect(Ip2, Port, [{alpn, ["sample"]}], 5000) of
                         {ok, Conn} ->
-                            ?LOG_DEBUG("Connected. Creating stream"),
+                            erlang:display("Connected. Creating stream"),
                             {ok, Stream} = quicer:start_stream(Conn, []),
                             {ok, 4} = quicer:send(Stream, <<"ping">>),
                             receive {quic, <<"pong">>, Stream, _, _, _} -> ok end,
-                            ?LOG_DEBUG("Received pong"),
+                            erlang:display("Received pong"),
                             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
                             quicer:controlling_process(Stream, DistCtrl),
                             HSData0 = quic_util:hs_data_common(DistCtrl),
-                            ?LOG_DEBUG("After hs data common"),
+                            erlang:display("After hs data common"),
                             HSData =
                                 HSData0#hs_data{kernel_pid = Kernel,
                                                 other_node = Node,
@@ -57,23 +57,23 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                                                 this_flags = 0,
                                                 other_version = ?ERL_DIST_VER,
                                                 request_type = Type},
-                            ?LOG_DEBUG("Starting handshake"),
+                            erlang:display("Starting handshake"),
                             dist_util:handshake_we_started(HSData);
                         Error ->
                             %% Other Node may have closed since
                             %% port_please !
-                            ?LOG_DEBUG("Couldn't connect to other node (~p). Reason: ~p.~n",
-                                   [Node, Error]),
+                            % erlang:display("Couldn't connect to other node (~p). Reason: ~p.~n",
+                                %    [Node, Error]),
                             ?shutdown(Node)
                     end;
                 Error ->
-                    ?LOG_DEBUG("port_please (~p) failed. Reason (~p) ~n", [Node, Error]),
+                    % erlang:display("port_please (~p) failed. Reason (~p) ~n", [Node, Error]),
                     ?shutdown(Node)
             end;
         _Other ->
-            ?LOG_DEBUG("inet_getaddr(~p) "
-                   "failed (~p).~n",
-                   [Node, _Other]),
+            % erlang:display("inet_getaddr(~p) "
+            %        "failed (~p).~n",
+            %        [Node, _Other]),
             ?shutdown(Node)
     end.
 

@@ -12,7 +12,7 @@ listen(Name) ->
     listen(Name, Host).
 
 listen(Name, Host) ->
-    ?LOG_DEBUG("Starting listening"),
+    erlang:display("Starting listening"),
     application:ensure_all_started(quicer),
     {_MinPort, _MaxPort} = get_port_range(),
     LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
@@ -25,7 +25,7 @@ listen(Name, Host) ->
     end,
 
     {ok, {Address, Port}} = quicer:sockname(L),
-    ?LOG_DEBUG("Listening on ~p:~p", [Address, Port]),
+    % erlang:display("Listening on ~p:~p", [Address, Port]),
     NetAddress =
         #net_address{address = Address,
                      host = Host,
@@ -47,7 +47,7 @@ address() ->
 
 accept(Listen) ->
     % priority max is enforced by Erlang documentation
-    ?LOG_DEBUG("Spawning Acceptor"),
+    erlang:display("Spawning Acceptor"),
     spawn_opt(quic_acceptor, acceptor_loop, [self(), Listen], [link, {priority, max}]).
 
 accept_connection(AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime) ->
