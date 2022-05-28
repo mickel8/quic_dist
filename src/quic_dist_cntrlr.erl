@@ -113,11 +113,132 @@ dist_cntrlr_loop(Stream, TickHandler) ->
             end,
             dist_cntrlr_loop(Stream, TickHandler);
         
-        {Ref, From, {handshake_complete, _Node, _DHandle}} ->
+        {Ref, From, {handshake_complete, _Node, DHandle}} ->
             erlang:display("[DIST] Handshake completed!!!"),
-            From ! {Ref, ok}
+            From ! {Ref, ok},
+            %% Handshake complete! Begin dispatching traffic
+
+            %% Use a separate process for dispatching input. This
+            %% is not necessary, but it enables parallel execution
+            %% of independent work loads at the same time as it
+            %% simplifies the implementation.
+            InputHandler = spawn_opt(
+                             fun() -> dist_controller_input_handler(DHandle,
+                                                                    Stream,
+                                                                    nil)
+                             end,
+                             [link] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
+            quicer:controlling_process(Stream, InputHandler),
+            %% Register the input handler process
+            erlang:dist_ctrl_input_handler(DHandle, InputHandler),
+            InputHandler ! DHandle,
+            process_flag(priority, normal),
+            erlang:dist_ctrl_get_data_notification(DHandle),
+            dist_controller_output_handler(DHandle, Stream)
+
     end.
 
+%% ---------------------------------------------------------------------
+%% Input handler
+%%
+%% Dispatch all traffic from the remote node coming to this node through
+%% the socket.
+%% ---------------------------------------------------------------------
+dist_controller_input_handler(DHandle, Stream, Sup) ->
+    % link(Sup),
+    receive
+        %% Wait for the input handler to be registered before starting
+        %% to deliver incoming data.
+        DHandle ->
+            dist_controller_input_loop(DHandle, Stream)
+    end.
+
+
+% dist_controller_input_loop(DHandle, Socket, N) when N =< ?ACTIVE_INPUT/2 ->
+%     %% Set the socket in active mode and define the number of received data
+%     %% packets that will be delivered as {tcp, Socket, Data} messages.
+%     inet:setopts(Socket, [{active, ?ACTIVE_INPUT - N}]),
+%     dist_controller_input_loop(DHandle, Socket, ?ACTIVE_INPUT);
+
+dist_controller_input_loop(DHandle, Stream) ->
+    receive
+        %% In active mode, data packets are delivered as messages
+        {quic, Data, _, _, _, _} ->
+            %% When data is received from the remote node, deliver it
+            %% to the local node.
+            erlang:dist_ctrl_put_data(DHandle, Data),
+            % try erlang:dist_ctrl_put_data(DHandle, Data)
+            % catch _ : _ -> death_row()
+            % end,
+            %% Decrease the counter when looping so that the socket is
+            %% set with {active, Count} again to receive more data.
+            dist_controller_input_loop(DHandle, Stream);
+
+        %% Connection to remote node terminated
+        % {tcp_closed, Socket} ->
+        %     exit(connection_closed);
+
+        %% Ignore all other messages
+        _ ->
+            dist_controller_input_loop(DHandle, Stream)
+    end.
+
+%% ---------------------------------------------------------------------
+%% Output handler
+%%
+%% Dispatch all outgoing traffic from this node to the remote node through
+%% the socket.
+%% ---------------------------------------------------------------------
+dist_controller_output_handler(DHandle, Stream) ->
+    receive
+        dist_data ->
+            %% Available outgoing data to send from this node
+            try dist_controller_send_data(DHandle, Stream)
+            catch _ : _ -> death_row()
+            end,
+            dist_controller_output_handler(DHandle, Stream);
+
+        _ ->
+            %% Ignore all other messages
+            dist_controller_output_handler(DHandle, Stream)
+    end.
+
+dist_controller_send_data(DHandle, Stream) ->
+    %% Fetch data from the local node to be sent to the remote node
+    case erlang:dist_ctrl_get_data(DHandle) of
+        none ->
+            %% Request notification when more outgoing data is available.
+            %% A dist_data message will be sent.
+            erlang:dist_ctrl_get_data_notification(DHandle);
+        Data ->
+            % stream_send(Stream, Data),
+            quicer:send(Stream, Data),
+            %% Loop as long as there is more data available to fetch
+            dist_controller_send_data(DHandle, Stream)
+    end.
+
+
+%% ---------------------------------------------------------------------
+%% death_row
+%%
+%% When the connection is on its way down, operations begin to fail. We
+%% catch the failures and call this function waiting for termination. We
+%% should be terminated by one of our links to the other involved parties
+%% that began bringing the connection down. By waiting for termination we
+%% avoid altering the exit reason for the connection teardown. We however
+%% limit the wait to 5 seconds and bring down the connection ourselves if
+%% not terminated...
+%% ---------------------------------------------------------------------
+death_row() ->
+    death_row(connection_closed).
+
+death_row(normal) ->
+    %% We do not want to exit with normal exit reason since it won't
+    %% bring down linked processes...
+    death_row();
+
+death_row(Reason) ->
+    receive after 5000 -> exit(Reason) end.
 
 %% ---------------------------------------------------------------------
 %% Tick handler
