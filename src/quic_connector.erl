@@ -21,7 +21,7 @@
 
 connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
     erlang:display("Starting connector loop"),
-    [Name, Address] = splitnode(Node, LongOrShortNames),
+    [Name, Address] = quic_util:splitnode(Node, LongOrShortNames),
     erlang:display("After splitnode"),
     case inet:getaddr(Address, inet) of
         {ok, _Ip} ->
@@ -76,45 +76,3 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
             %        [Node, _Other]),
             ?shutdown(Node)
     end.
-
-%% If Node is illegal terminate the connection setup!!
-splitnode(Node, LongOrShortNames) ->
-    case split_node(atom_to_list(Node), $@, []) of
-        [Name | Tail] when Tail =/= [] ->
-            Host = lists:append(Tail),
-            case split_node(Host, $., []) of
-                [_] when LongOrShortNames =:= longnames ->
-                    case inet:parse_address(Host) of
-                        {ok, _} ->
-                            [Name, Host];
-                        _ ->
-                            ?LOG_ERROR("** System running to use "
-                                      "fully qualified "
-                                      "hostnames **~n"
-                                      "** Hostname ~ts is illegal **~n",
-                                      [Host]),
-                            ?shutdown(Node)
-                    end;
-                L when length(L) > 1, LongOrShortNames =:= shortnames ->
-                    ?LOG_ERROR("** System NOT running to use fully qualified "
-                              "hostnames **~n"
-                              "** Hostname ~ts is illegal **~n",
-                              [Host]),
-                    ?shutdown(Node);
-                _ ->
-                    [Name, Host]
-            end;
-        [_] ->
-            ?LOG_ERROR("** Nodename ~p illegal, no '@' character **~n", [Node]),
-            ?shutdown(Node);
-        _ ->
-            ?LOG_ERROR("** Nodename ~p illegal **~n", [Node]),
-            ?shutdown(Node)
-    end.
-
-split_node([Chr | T], Chr, Ack) ->
-    [lists:reverse(Ack) | split_node(T, Chr, [])];
-split_node([H | T], Chr, Ack) ->
-    split_node(T, Chr, [H | Ack]);
-split_node([], _, Ack) ->
-    [lists:reverse(Ack)].

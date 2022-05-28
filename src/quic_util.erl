@@ -1,6 +1,6 @@
 -module(quic_util).
 
--export([call_dist_ctrl/2, hs_data_common/1]).
+-export([call_dist_ctrl/2, hs_data_common/1, splitnode/2, split_node/3]).
 
 -include_lib("kernel/include/dist_util.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -119,3 +119,46 @@ setopts_post_nodeup_fun() ->
 handshake_complete_fun() ->
     fun(Ctrlr, Node, DHandle) -> call_dist_ctrl(Ctrlr, {handshake_complete, Node, DHandle})
     end.
+
+
+%% If Node is illegal terminate the connection setup!!
+splitnode(Node, LongOrShortNames) ->
+    case split_node(atom_to_list(Node), $@, []) of
+        [Name | Tail] when Tail =/= [] ->
+            Host = lists:append(Tail),
+            case split_node(Host, $., []) of
+                [_] when LongOrShortNames =:= longnames ->
+                    case inet:parse_address(Host) of
+                        {ok, _} ->
+                            [Name, Host];
+                        _ ->
+                            ?LOG_ERROR("** System running to use "
+                                      "fully qualified "
+                                      "hostnames **~n"
+                                      "** Hostname ~ts is illegal **~n",
+                                      [Host]),
+                            ?shutdown(Node)
+                    end;
+                L when length(L) > 1, LongOrShortNames =:= shortnames ->
+                    ?LOG_ERROR("** System NOT running to use fully qualified "
+                              "hostnames **~n"
+                              "** Hostname ~ts is illegal **~n",
+                              [Host]),
+                    ?shutdown(Node);
+                _ ->
+                    [Name, Host]
+            end;
+        [_] ->
+            ?LOG_ERROR("** Nodename ~p illegal, no '@' character **~n", [Node]),
+            ?shutdown(Node);
+        _ ->
+            ?LOG_ERROR("** Nodename ~p illegal **~n", [Node]),
+            ?shutdown(Node)
+    end.
+
+split_node([Chr | T], Chr, Ack) ->
+    [lists:reverse(Ack) | split_node(T, Chr, [])];
+split_node([H | T], Chr, Ack) ->
+    split_node(T, Chr, [H | Ack]);
+split_node([], _, Ack) ->
+    [lists:reverse(Ack)].

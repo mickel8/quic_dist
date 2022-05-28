@@ -2,6 +2,7 @@
 
 -export([dist_cntrlr_loop/2, spawn_dist_cntrlr/1]).
 -include_lib("kernel/include/logger.hrl").
+-include_lib("kernel/include/net_address.hrl").
 
 %% COPIED FROM gen_tcp_dist.erl example
 %%
@@ -52,6 +53,20 @@ dist_cntrlr_loop(Stream, TickHandler) ->
         {Ref, From, getll} ->
             erlang:display("getll"),
             From ! {Ref, {ok, self()}},
+            dist_cntrlr_loop(Stream, TickHandler);
+
+        {Ref, From, {address, Node}} ->
+            Res = case quicer:peername(Stream) of
+                      {ok, {_PeerIp, _PeerPort}=Address} ->
+                          case quic_util:split_node(atom_to_list(Node), $@, []) of
+                              [_,Host] ->
+                                  #net_address{address=Address,host=Host,
+                                               protocol=udp, family=inet};
+                              _ ->
+                                  {error, no_node}
+                          end
+                  end,
+            From ! {Ref, Res},
             dist_cntrlr_loop(Stream, TickHandler);
 
         %% Set the Socket options just before the connection is established
