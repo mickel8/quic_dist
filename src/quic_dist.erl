@@ -17,14 +17,14 @@ listen(Name, Host) ->
     {_MinPort, _MaxPort} = get_port_range(),
     LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
     
-    {ok, L} =
+    {ok, LHandle} =
     if Name == 'x' ->
         quicer:listen("127.0.0.1:55555", LOptions);
     true ->
         quicer:listen("127.0.0.2:55555", LOptions)
     end,
 
-    {ok, {Address, Port}} = quicer:sockname(L),
+    {ok, Address} = quicer:sockname(LHandle),
     % erlang:display("Listening on ~p:~p", [Address, Port]),
     NetAddress =
         #net_address{address = Address,
@@ -32,7 +32,7 @@ listen(Name, Host) ->
                      protocol = udp,
                      family = inet},
     Creation = 1,
-    {ok, {L, NetAddress, Creation}}.
+    {ok, {LHandle, NetAddress, Creation}}.
 
 get_port_range() ->
     {50000, 60000}.
