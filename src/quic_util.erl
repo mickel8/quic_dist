@@ -45,9 +45,9 @@ hs_data_common(DistCtrl) ->
 tick_fun(DistCtrl, TickHandler) ->
     fun(Ctrl) when Ctrl == DistCtrl -> TickHandler ! tick end.
 
-getstat_fun(DistCtrl, Socket) ->
+getstat_fun(DistCtrl, Stream) ->
     fun(Ctrl) when Ctrl == DistCtrl ->
-       case inet:getstat(Socket, [recv_cnt, send_cnt, send_pend]) of
+       case quicer:getstat(Stream, [recv_cnt, send_cnt, send_pend]) of
            {ok, Stat} ->
                split_stat(Stat, 0, 0, 0);
            Error ->
