@@ -13,6 +13,8 @@ acceptor_loop(Kernel, Listen) ->
             {ok, Conn} = quicer:handshake(Conn, 5000),
             erlang:display("Accepting stream"),
             {ok, Stream} = quicer:accept_stream(Conn, []),
+            receive {quic, <<"ping">>, Stream, _, _, _} -> ok end,
+            {ok, 4} = quicer:send(Stream, <<"pong">>),
             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
             quicer:controlling_process(Stream, DistCtrl),
             Kernel ! {accept, self(), DistCtrl, inet, udp},
