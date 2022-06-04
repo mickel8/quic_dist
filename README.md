@@ -23,6 +23,10 @@ $ ERL_FLAGS="-proto_dist quic -no_epmd" rebar3 shell
 (node2@michal)2> net_adm:ping(node1@michal)
 ```
 
+## Architecture
+
+![](architecture.drawio.png)
+
 ## Resources
 
 #### Most important
