@@ -5,16 +5,14 @@
 -include_lib("kernel/include/logger.hrl").
 
 acceptor_loop(Kernel, Listen) ->
-    erlang:display("Running Acceptor loop"),
+    erlang:display("Waiting for new connection"),
     case quicer:accept(Listen, []) of
         {ok, Conn} ->
             erlang:display("New connection, accepting"),
-            {ok, Conn} = quicer:handshake(Conn, 5000),
             erlang:display("Performing QUIC handshake"),
-            {ok, Stream} = quicer:accept_stream(Conn, []),
+            {ok, Conn} = quicer:handshake(Conn, 5000),
             erlang:display("Accepting stream"),
-            receive {quic, <<"ping">>, Stream, _, _, _} -> ok end,
-            {ok, 4} = quicer:send(Stream, <<"pong">>),
+            {ok, Stream} = quicer:accept_stream(Conn, []),
             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
             quicer:controlling_process(Stream, DistCtrl),
             Kernel ! {accept, self(), DistCtrl, inet, udp},
