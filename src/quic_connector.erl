@@ -37,13 +37,11 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                 true  ->
                     dist_util:reset_timer(Timer),
                     % erlang:display("Connecting to ~p:~p", [Ip2, Port]),
+                    erlang:display("Connecting"),
                     case quicer:connect(Ip2, Port, [{alpn, ["sample"]}], 5000) of
                         {ok, Conn} ->
                             erlang:display("Connected. Creating stream"),
                             {ok, Stream} = quicer:start_stream(Conn, []),
-                            {ok, 4} = quicer:send(Stream, <<"ping">>),
-                            receive {quic, <<"pong">>, Stream, _, _, _} -> ok end,
-                            erlang:display("Received pong"),
                             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
                             quicer:controlling_process(Stream, DistCtrl),
                             HSData0 = quic_util:hs_data_common(DistCtrl),
