@@ -83,15 +83,17 @@ getopts(S, Opts) ->
     inet:getopts(S, Opts).
 
 send_fun() ->
-    fun(Ctrlr, Packet) -> call_dist_ctrl(Ctrlr, {send, Packet}) end.
+    fun(Ctrlr, Packet) -> 
+        erlang:display({sending, Packet}),
+        call_dist_ctrl(Ctrlr, {send, Packet}) 
+    end.
 
 recv_fun() ->
     fun(Ctrlr, Length, Timeout) ->
        case call_dist_ctrl(Ctrlr, {recv, Length, Timeout}) of
            {ok, Bin} when is_binary(Bin) ->
-               X = {ok, binary_to_list(Bin)},
-               erlang:display(X),
-                X;
+                erlang:display({received, Bin}),
+                {ok, binary_to_list(Bin)};
            Other ->
                Other
        end

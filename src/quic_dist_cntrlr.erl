@@ -146,11 +146,12 @@ dist_cntrlr_loop(Stream, TickHandler) ->
 %% ---------------------------------------------------------------------
 dist_controller_input_handler(DHandle, Stream, Sup) ->
     % link(Sup),
+    erlang:display(input_handler),
     receive
         %% Wait for the input handler to be registered before starting
         %% to deliver incoming data.
         DHandle ->
-            dist_controller_input_loop(DHandle, Stream)
+            dist_controller_input_loop(DHandle, Stream, <<>>)
     end.
 
 
@@ -160,19 +161,32 @@ dist_controller_input_handler(DHandle, Stream, Sup) ->
 %     inet:setopts(Socket, [{active, ?ACTIVE_INPUT - N}]),
 %     dist_controller_input_loop(DHandle, Socket, ?ACTIVE_INPUT);
 
-dist_controller_input_loop(DHandle, Stream) ->
+dist_controller_input_loop(DHandle, Stream, Acc) ->
+    erlang:display(input_loop),
     receive
         %% In active mode, data packets are delivered as messages
         {quic, Data, _, _, _, _} ->
             %% When data is received from the remote node, deliver it
             %% to the local node.
-            erlang:dist_ctrl_put_data(DHandle, Data),
+            erlang:display({input_handler, Data}),
+            Acc2 = <<Acc/binary, Data/binary>>,
+            <<Len:32, Rest/binary>> = Acc2,
+            if byte_size(Rest) >= Len ->
+                erlang:display({input_handler, len, Len}),
+                <<Data2:Len/binary, Rest2/binary>> = Rest,
+                erlang:display({enough_data, Data2}),
+                erlang:dist_ctrl_put_data(DHandle, Data2),
+                dist_controller_input_loop(DHandle, Stream, Rest2);
+            true ->
+                erlang:display(not_enough_data),
+                dist_controller_input_loop(DHandle, Stream, Acc2)
+            end;
             % try erlang:dist_ctrl_put_data(DHandle, Data)
             % catch _ : _ -> death_row()
             % end,
             %% Decrease the counter when looping so that the socket is
             %% set with {active, Count} again to receive more data.
-            dist_controller_input_loop(DHandle, Stream);
+            % dist_controller_input_loop(DHandle, Stream);
 
         %% Connection to remote node terminated
         % {tcp_closed, Socket} ->
@@ -180,7 +194,7 @@ dist_controller_input_loop(DHandle, Stream) ->
 
         %% Ignore all other messages
         _ ->
-            dist_controller_input_loop(DHandle, Stream)
+            dist_controller_input_loop(DHandle, Stream, Acc)
     end.
 
 %% ---------------------------------------------------------------------
@@ -190,6 +204,7 @@ dist_controller_input_loop(DHandle, Stream) ->
 %% the socket.
 %% ---------------------------------------------------------------------
 dist_controller_output_handler(DHandle, Stream) ->
+    erlang:display(output_handler),
     receive
         dist_data ->
             %% Available outgoing data to send from this node
@@ -205,6 +220,7 @@ dist_controller_output_handler(DHandle, Stream) ->
 
 dist_controller_send_data(DHandle, Stream) ->
     %% Fetch data from the local node to be sent to the remote node
+    erlang:display(send_data),
     case erlang:dist_ctrl_get_data(DHandle) of
         none ->
             %% Request notification when more outgoing data is available.
@@ -212,7 +228,16 @@ dist_controller_send_data(DHandle, Stream) ->
             erlang:dist_ctrl_get_data_notification(DHandle);
         Data ->
             % stream_send(Stream, Data),
-            quicer:send(Stream, Data),
+            RealData = if is_list(Data) ->
+                binary:list_to_bin(Data);
+            true ->
+                Data
+            end,
+            DataLen = byte_size(RealData),
+            erlang:display({data_len, DataLen}),
+            LenPlusData = <<DataLen:32, RealData/binary>>,
+            erlang:display({output_handler, len_plus_data, LenPlusData}),
+            quicer:send(Stream, LenPlusData),
             %% Loop as long as there is more data available to fetch
             dist_controller_send_data(DHandle, Stream)
     end.
