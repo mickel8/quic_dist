@@ -4,15 +4,14 @@
          select/1, setopts/2, getopts/2]).
 
 -include_lib("kernel/include/net_address.hrl").
--include_lib("kernel/include/logger.hrl").
--include_lib("kernel/include/dist_util.hrl").
+-include_lib("include/quic_util.hrl").
 
 listen(Name) ->
     {ok, Host} = inet:gethostname(),
     listen(Name, Host).
 
 listen(Name, Host) ->
-    erlang:display("Starting listening"),
+    ?quic_debug("Starting listening"),
     application:ensure_all_started(quicer),
     {_MinPort, _MaxPort} = get_port_range(),
     LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
@@ -25,7 +24,6 @@ listen(Name, Host) ->
     end,
 
     {ok, Address} = quicer:sockname(LHandle),
-    % erlang:display("Listening on ~p:~p", [Address, Port]),
     NetAddress =
         #net_address{address = Address,
                      host = Host,
@@ -47,7 +45,7 @@ address() ->
 
 accept(Listen) ->
     % priority max is enforced by Erlang documentation
-    erlang:display("Spawning Acceptor"),
+    ?quic_debug("Spawning Acceptor"),
     spawn_opt(quic_acceptor, acceptor_loop, [self(), Listen], [link, {priority, max}]).
 
 accept_connection(AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime) ->
@@ -57,6 +55,7 @@ accept_connection(AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime) ->
               [link, {priority, max}]).
 
 setup(Node, Type, MyNode, LongOrShortNames, SetupTime) ->
+    ?quic_debug("Spawning connector"),
     spawn_opt(quic_connector,
               connector_loop,
               [self(), Node, Type, MyNode, LongOrShortNames, SetupTime],

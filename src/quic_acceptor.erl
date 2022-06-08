@@ -2,18 +2,19 @@
 
 -export([acceptor_loop/2]).
 
--include_lib("kernel/include/logger.hrl").
+-include_lib("include/quic_util.hrl").
 
 acceptor_loop(Kernel, Listen) ->
-    erlang:display("Waiting for new connection"),
+    ?quic_debug("Waiting for new connection"),
     case quicer:accept(Listen, []) of
         {ok, Conn} ->
-            erlang:display("New connection, accepting"),
-            erlang:display("Performing QUIC handshake"),
+            ?quic_debug("New connection, accepting"),
+            ?quic_debug("Performing QUIC handshake"),
             {ok, Conn} = quicer:handshake(Conn, 5000),
-            erlang:display("Accepting stream"),
+            ?quic_debug("Accepting stream"),
             {ok, Stream} = quicer:accept_stream(Conn, []),
             receive {quic, <<"ping">>, Stream, _, _, _} -> ok end,
+            ?quic_debug("Received random ping. Responding with pong"),
             {ok, 4} = quicer:send(Stream, <<"pong">>),
             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
             quicer:controlling_process(Stream, DistCtrl),
@@ -35,6 +36,5 @@ acceptor_loop(Kernel, Listen) ->
             end,
             acceptor_loop(Kernel, Listen);
         Error ->
-            erlang:display(Error),
             exit(Error)
     end.
