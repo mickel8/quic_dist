@@ -1,11 +1,11 @@
 -module(quic_supervisor).
 
 -export([supervisor_loop/6]).
--include_lib("kernel/include/logger.hrl").
 
 -import(quic_util, [call_dist_ctrl/2]).
 
 -include_lib("kernel/include/dist_util.hrl").
+-include_lib("include/quic_util.hrl").
 
 supervisor_loop(Kernel, Acceptor, DistCtrl, MyNode, Allowed, SetupTime) ->
     receive
@@ -21,7 +21,7 @@ supervisor_loop(Kernel, Acceptor, DistCtrl, MyNode, Allowed, SetupTime) ->
                                         timer = Timer,
                                         this_flags = 0,
                                         allowed = Allowed},
-                    erlang:display("handshake other started"),
+                    ?quic_debug("Starting handshake"),
                     dist_util:handshake_other_started(HSData);
                 {false, _IP} ->
                     ?shutdown(no_node)

@@ -1,8 +1,8 @@
 -module(quic_dist_cntrlr).
 
 -export([dist_cntrlr_loop/2, spawn_dist_cntrlr/1]).
--include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/net_address.hrl").
+-include_lib("include/quic_util.hrl").
 
 %% COPIED FROM gen_tcp_dist.erl example
 %%
@@ -14,7 +14,7 @@
         [{message_queue_data, off_heap}, {fullsweep_after, 0}]).
 
 spawn_dist_cntrlr(Stream) ->
-    erlang:display("Running DistCntrlr loop"),
+    ?quic_debug("Running DistCntrlr loop"),
     TickHandler = spawn_opt(fun() -> tick_handler(Stream) end,
             %% Spawn on max priority
             [link, {priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
@@ -44,14 +44,11 @@ dist_cntrlr_loop(Stream, TickHandler) ->
         
         %% Send Packet onto the stream and send the result back
         {Ref, From, {send, Packet}} ->
-            % erlang:display("~s ~p", ["[DIST] Sending", Packet]),
             Res = quicer:send(Stream, Packet),
-            % erlang:display("~s ~p", ["[DIST] Sent", Res]),
             From ! {Ref, Res},
             dist_cntrlr_loop(Stream, TickHandler);
 
         {Ref, From, getll} ->
-            erlang:display("getll"),
             From ! {Ref, {ok, self()}},
             dist_cntrlr_loop(Stream, TickHandler);
 
@@ -73,7 +70,6 @@ dist_cntrlr_loop(Stream, TickHandler) ->
         %% for normal data traffic and before nodeup is delivered. A nodeup
         %% message is delivered when a new node is connected.
         {Ref, From, pre_nodeup} ->
-            erlang:display("pre nodeup"),
             %% Switch the distribution protocol to a packet header of
             %% 4 bytes which is used to store the length of each packet
             %% sent over the streamed Unix Domain Sockets.
@@ -92,7 +88,6 @@ dist_cntrlr_loop(Stream, TickHandler) ->
             % Res = inet:setopts(Socket,
             %                    [{active, false},
             %                     {packet, 4}]),
-            erlang:display("post nodeup"),
             From ! {Ref, ok},
             dist_cntrlr_loop(Stream, TickHandler);
 
@@ -100,16 +95,10 @@ dist_cntrlr_loop(Stream, TickHandler) ->
 
         %% Receive a packet of Length bytes, within Timeout milliseconds
         {Ref, From, {recv, Length, Timeout}} ->
-            erlang:display(["Receiving", Length, Timeout]),
-            % erlang:display("~s ~p ~p", ["[DIST] Receiving", Length, Timeout]),
             % TODO use Timeout
-            % erlang:display("~s ~p", ["process", process_info(self(), messages)]),
             receive
                 {quic, Msg, _, _, _, _} ->
-                    % erlang:display("~s ~p", ["[DIST] Received", Msg]),
                     From ! {Ref, {ok, Msg}}
-                % Other ->
-                %     erlang:display("~s, ~p", ["OTHER", Other])
             end,
             dist_cntrlr_loop(Stream, TickHandler);
         
@@ -146,7 +135,6 @@ dist_cntrlr_loop(Stream, TickHandler) ->
 %% ---------------------------------------------------------------------
 dist_controller_input_handler(DHandle, Stream, Sup) ->
     % link(Sup),
-    erlang:display(input_handler),
     receive
         %% Wait for the input handler to be registered before starting
         %% to deliver incoming data.
@@ -162,23 +150,18 @@ dist_controller_input_handler(DHandle, Stream, Sup) ->
 %     dist_controller_input_loop(DHandle, Socket, ?ACTIVE_INPUT);
 
 dist_controller_input_loop(DHandle, Stream, Acc) ->
-    erlang:display(input_loop),
     receive
         %% In active mode, data packets are delivered as messages
         {quic, Data, _, _, _, _} ->
             %% When data is received from the remote node, deliver it
             %% to the local node.
-            erlang:display({input_handler, Data}),
             Acc2 = <<Acc/binary, Data/binary>>,
             <<Len:32, Rest/binary>> = Acc2,
             if byte_size(Rest) >= Len ->
-                erlang:display({input_handler, len, Len}),
                 <<Data2:Len/binary, Rest2/binary>> = Rest,
-                erlang:display({enough_data, Data2}),
                 erlang:dist_ctrl_put_data(DHandle, Data2),
                 dist_controller_input_loop(DHandle, Stream, Rest2);
             true ->
-                erlang:display(not_enough_data),
                 dist_controller_input_loop(DHandle, Stream, Acc2)
             end;
             % try erlang:dist_ctrl_put_data(DHandle, Data)
@@ -204,7 +187,6 @@ dist_controller_input_loop(DHandle, Stream, Acc) ->
 %% the socket.
 %% ---------------------------------------------------------------------
 dist_controller_output_handler(DHandle, Stream) ->
-    erlang:display(output_handler),
     receive
         dist_data ->
             %% Available outgoing data to send from this node
@@ -220,7 +202,6 @@ dist_controller_output_handler(DHandle, Stream) ->
 
 dist_controller_send_data(DHandle, Stream) ->
     %% Fetch data from the local node to be sent to the remote node
-    erlang:display(send_data),
     case erlang:dist_ctrl_get_data(DHandle) of
         none ->
             %% Request notification when more outgoing data is available.
@@ -234,9 +215,7 @@ dist_controller_send_data(DHandle, Stream) ->
                 Data
             end,
             DataLen = byte_size(RealData),
-            erlang:display({data_len, DataLen}),
             LenPlusData = <<DataLen:32, RealData/binary>>,
-            erlang:display({output_handler, len_plus_data, LenPlusData}),
             quicer:send(Stream, LenPlusData),
             %% Loop as long as there is more data available to fetch
             dist_controller_send_data(DHandle, Stream)
@@ -273,12 +252,10 @@ death_row(Reason) ->
 %% receives a 'tick' request from the connection supervisor.
 %% ---------------------------------------------------------------------
 tick_handler(Stream) ->
-    % erlang:display("~p~n", [{?MODULE, tick_handler, self()}]),
     receive
         tick ->
             %% May block due to busy port...
             Res = quicer:send(Stream, "");
-            % erlang:display("~s, ~p", ["Sent tick", Res]);
         _ ->
             ok
     end,

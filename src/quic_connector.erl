@@ -3,7 +3,7 @@
 -export([connector_loop/6]).
 
 -include_lib("kernel/include/dist_util.hrl").
--include_lib("kernel/include/logger.hrl").
+-include_lib("include/quic_util.hrl").
 
 %% Set the distribution protocol version statically (the different values
 %% are listed in epmd.mk). All nodes are expected to use the same version
@@ -20,9 +20,7 @@
 -import(error_logger, [error_msg/2]).
 
 connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
-    erlang:display("Starting connector loop"),
-    [Name, Address] = quic_util:splitnode(Node, LongOrShortNames),
-    erlang:display("After splitnode"),
+    [_Name, Address] = quic_util:splitnode(Node, LongOrShortNames),
     case inet:getaddr(Address, inet) of
         {ok, _Ip} ->
             Ip2 = 
@@ -36,19 +34,18 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
             case true of
                 true  ->
                     dist_util:reset_timer(Timer),
-                    % erlang:display("Connecting to ~p:~p", [Ip2, Port]),
-                    erlang:display("Connecting"),
+                    ?quic_debug({connecting, Ip2, Port}),
                     case quicer:connect(Ip2, Port, [{alpn, ["sample"]}], 5000) of
                         {ok, Conn} ->
-                            erlang:display("Connected. Creating stream"),
+                            ?quic_debug("Connected. Creating stream"),
                             {ok, Stream} = quicer:start_stream(Conn, []),
+                            ?quic_debug("Sending random ping just to trigger creating stream"),
                             {ok, 4} = quicer:send(Stream, <<"ping">>),
                             receive {quic, <<"pong">>, Stream, _, _, _} -> ok end,
-                            erlang:display("Received pong"),
+                            ?quic_debug("Received pong"),
                             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
                             quicer:controlling_process(Stream, DistCtrl),
                             HSData0 = quic_util:hs_data_common(DistCtrl),
-                            erlang:display("After hs data common"),
                             HSData =
                                 HSData0#hs_data{kernel_pid = Kernel,
                                                 other_node = Node,
@@ -58,22 +55,15 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                                                 this_flags = 0,
                                                 other_version = ?ERL_DIST_VER,
                                                 request_type = Type},
-                            erlang:display("Starting handshake"),
+                            ?quic_debug("Starting handshake"),
                             dist_util:handshake_we_started(HSData);
-                        Error ->
+                        _Error ->
                             %% Other Node may have closed since
-                            %% port_please !
-                            % erlang:display("Couldn't connect to other node (~p). Reason: ~p.~n",
-                                %    [Node, Error]),
                             ?shutdown(Node)
                     end;
-                Error ->
-                    % erlang:display("port_please (~p) failed. Reason (~p) ~n", [Node, Error]),
+                _Error ->
                     ?shutdown(Node)
             end;
         _Other ->
-            % erlang:display("inet_getaddr(~p) "
-            %        "failed (~p).~n",
-            %        [Node, _Other]),
             ?shutdown(Node)
     end.
