@@ -1,6 +1,6 @@
 -module(quic_dist_cntrlr).
 
--export([dist_cntrlr_loop/3, spawn_dist_cntrlr/2]).
+-export([dist_cntrlr_loop/4, spawn_dist_cntrlr/2]).
 -include_lib("kernel/include/net_address.hrl").
 -include_lib("include/quic_util.hrl").
 
@@ -20,37 +20,47 @@ spawn_dist_cntrlr(Conn, Stream) ->
             [link, {priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
     spawn_opt(quic_dist_cntrlr,
               dist_cntrlr_loop,
-              [Conn, Stream, TickHandler],
+              [Conn, Stream, TickHandler, <<>>],
               [{priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS).
 
-dist_cntrlr_loop(Conn, Stream, TickHandler) ->
+
+dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
     receive
         %% Set Pid as the connection supervisor, link with it and
         %% send the linking result back.
         {Ref, From, {supervisor, SupervisorPid}} ->
             Res = link(SupervisorPid),
             From ! {Ref, Res},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         %% Send the tick handler to the From process
         {Ref, From, tick_handler} ->
             From ! {Ref, TickHandler},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         %% Send the stream to the From process
         {Ref, From, stream} ->
             From ! {Ref, Stream},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
         
         %% Send Packet onto the stream and send the result back
         {Ref, From, {send, Packet}} ->
-            Res = quicer:send(Stream, Packet),
+            %% simulate {packet, 2} option of Erlang TCP socket;
+            %% each message of the Distribution Handshake has to be 
+            %% prepended with 2-byte packet size field
+            BinPacket = if is_list(Packet) ->
+                binary:list_to_bin(Packet);
+            true ->
+                Packet
+            end,
+            PacketLen = byte_size(BinPacket),
+            Res = quicer:send(Stream, <<PacketLen:16, BinPacket/binary>>),
             From ! {Ref, Res},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         {Ref, From, getll} ->
             From ! {Ref, {ok, self()}},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         {Ref, From, {address, Node}} ->
             Res = case quicer:peername(Conn) of
@@ -64,7 +74,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler) ->
                           end
                   end,
             From ! {Ref, Res},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         %% Set the Socket options just before the connection is established
         %% for normal data traffic and before nodeup is delivered. A nodeup
@@ -77,7 +87,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler) ->
             %                    [{active, false},
             %                     {packet, 4}]),
             From ! {Ref, ok},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         %% Set the Socket options just after the connection is established
         %% for normal data traffic and after nodeup is delivered.
@@ -89,18 +99,27 @@ dist_cntrlr_loop(Conn, Stream, TickHandler) ->
             %                    [{active, false},
             %                     {packet, 4}]),
             From ! {Ref, ok},
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
-
-
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
 
         %% Receive a packet of Length bytes, within Timeout milliseconds
         {Ref, From, {recv, Length, Timeout}} ->
             % TODO use Timeout
             receive
                 {quic, Msg, _, _, _, _} ->
-                    From ! {Ref, {ok, Msg}}
-            end,
-            dist_cntrlr_loop(Conn, Stream, TickHandler);
+                    NewAcc = <<RecvAcc/binary, Msg/binary>>,
+                    if byte_size(NewAcc) >= 2 ->
+                        <<PacketLen:16, Data/binary>> = NewAcc,
+                        if byte_size(Data) >= PacketLen ->
+                            <<Packet:PacketLen/binary, Rest/binary>> = Data,
+                            From ! {Ref, {ok, Packet}},
+                            dist_cntrlr_loop(Conn, Stream, TickHandler, Rest);
+                        true ->
+                            dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc)
+                        end;
+                    true ->
+                        dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc)
+                    end
+            end;
         
         {Ref, From, {handshake_complete, _Node, DHandle}} ->
             erlang:display("[DIST] Handshake completed!!!"),
