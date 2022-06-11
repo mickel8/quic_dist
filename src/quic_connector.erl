@@ -43,7 +43,7 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                             {ok, 4} = quicer:send(Stream, <<"ping">>),
                             receive {quic, <<"pong">>, Stream, _, _, _} -> ok end,
                             ?quic_debug("Received pong"),
-                            DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
+                            DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Conn, Stream),
                             quicer:controlling_process(Stream, DistCtrl),
                             HSData0 = quic_util:hs_data_common(DistCtrl),
                             HSData =

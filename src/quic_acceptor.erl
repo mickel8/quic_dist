@@ -16,7 +16,7 @@ acceptor_loop(Kernel, Listen) ->
             receive {quic, <<"ping">>, Stream, _, _, _} -> ok end,
             ?quic_debug("Received random ping. Responding with pong"),
             {ok, 4} = quicer:send(Stream, <<"pong">>),
-            DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Stream),
+            DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Conn, Stream),
             quicer:controlling_process(Stream, DistCtrl),
             Kernel ! {accept, self(), DistCtrl, inet, udp},
             receive

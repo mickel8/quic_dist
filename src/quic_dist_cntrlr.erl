@@ -1,6 +1,6 @@
 -module(quic_dist_cntrlr).
 
--export([dist_cntrlr_loop/2, spawn_dist_cntrlr/1]).
+-export([dist_cntrlr_loop/3, spawn_dist_cntrlr/2]).
 -include_lib("kernel/include/net_address.hrl").
 -include_lib("include/quic_util.hrl").
 
@@ -13,47 +13,47 @@
 -define(DIST_CNTRL_COMMON_SPAWN_OPTS,
         [{message_queue_data, off_heap}, {fullsweep_after, 0}]).
 
-spawn_dist_cntrlr(Stream) ->
+spawn_dist_cntrlr(Conn, Stream) ->
     ?quic_debug("Running DistCntrlr loop"),
     TickHandler = spawn_opt(fun() -> tick_handler(Stream) end,
             %% Spawn on max priority
             [link, {priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
     spawn_opt(quic_dist_cntrlr,
               dist_cntrlr_loop,
-              [Stream, TickHandler],
+              [Conn, Stream, TickHandler],
               [{priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS).
 
-dist_cntrlr_loop(Stream, TickHandler) ->
+dist_cntrlr_loop(Conn, Stream, TickHandler) ->
     receive
         %% Set Pid as the connection supervisor, link with it and
         %% send the linking result back.
         {Ref, From, {supervisor, SupervisorPid}} ->
             Res = link(SupervisorPid),
             From ! {Ref, Res},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
         %% Send the tick handler to the From process
         {Ref, From, tick_handler} ->
             From ! {Ref, TickHandler},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
         %% Send the stream to the From process
         {Ref, From, stream} ->
             From ! {Ref, Stream},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
         
         %% Send Packet onto the stream and send the result back
         {Ref, From, {send, Packet}} ->
             Res = quicer:send(Stream, Packet),
             From ! {Ref, Res},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
         {Ref, From, getll} ->
             From ! {Ref, {ok, self()}},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
         {Ref, From, {address, Node}} ->
-            Res = case quicer:peername(Stream) of
+            Res = case quicer:peername(Conn) of
                       {ok, {_PeerIp, _PeerPort}=Address} ->
                           case quic_util:split_node(atom_to_list(Node), $@, []) of
                               [_,Host] ->
@@ -64,7 +64,7 @@ dist_cntrlr_loop(Stream, TickHandler) ->
                           end
                   end,
             From ! {Ref, Res},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
         %% Set the Socket options just before the connection is established
         %% for normal data traffic and before nodeup is delivered. A nodeup
@@ -77,7 +77,7 @@ dist_cntrlr_loop(Stream, TickHandler) ->
             %                    [{active, false},
             %                     {packet, 4}]),
             From ! {Ref, ok},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
         %% Set the Socket options just after the connection is established
         %% for normal data traffic and after nodeup is delivered.
@@ -89,7 +89,7 @@ dist_cntrlr_loop(Stream, TickHandler) ->
             %                    [{active, false},
             %                     {packet, 4}]),
             From ! {Ref, ok},
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
 
 
 
@@ -100,7 +100,7 @@ dist_cntrlr_loop(Stream, TickHandler) ->
                 {quic, Msg, _, _, _, _} ->
                     From ! {Ref, {ok, Msg}}
             end,
-            dist_cntrlr_loop(Stream, TickHandler);
+            dist_cntrlr_loop(Conn, Stream, TickHandler);
         
         {Ref, From, {handshake_complete, _Node, DHandle}} ->
             erlang:display("[DIST] Handshake completed!!!"),
