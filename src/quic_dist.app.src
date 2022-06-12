@@ -1,6 +1,6 @@
 {application,
- qerldist,
- [{description, "An OTP library"},
+ quic_dist,
+ [{description, "QUIC carrier for Erlang Distribution Protocol"},
   {vsn, "0.1.0"},
   {registered, []},
   {applications, [kernel, stdlib, quicer]},
