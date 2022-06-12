@@ -1,6 +1,6 @@
-# qerldist
+# quic_dist
 
-Erlang Distibution Protocol basing on QUIC.
+QUIC carrier for Erlang Distribution Protocol.
 
 ## Build
     $ rebar3 compile
