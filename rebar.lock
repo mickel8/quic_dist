@@ -1,8 +1,12 @@
+{"1.2.0",
 [{<<"quicer">>,
   {git,"https://github.com/emqx/quic.git",
-       {ref,"0742e6dde38a09cd7fb9461d6c0db051938c7939"}},
+       {ref,"562bf32e7241726b5c33da26bff5c59ab55f21a6"}},
   0},
- {<<"snabbkaffe">>,
-  {git,"https://github.com/kafka4beam/snabbkaffe.git",
-       {ref,"f87ef591068f1fd1689b942ca7126e7a9c2698cd"}},
-  1}].
+ {<<"snabbkaffe">>,{pkg,<<"snabbkaffe">>,<<"1.0.1">>},1}]}.
+[
+{pkg_hash,[
+ {<<"snabbkaffe">>, <<"8E95CCBC90E1445C6B504D7980A35FE87E140BD694CED35851965B87D42BD882">>}]},
+{pkg_hash_ext,[
+ {<<"snabbkaffe">>, <<"035812759963897B71EE69A11E8DFF93BBBB0F475055479A557DD3C4FD72FE33">>}]}
+].
