@@ -1,6 +1,6 @@
 -module(quic_dist_cntrlr).
 
--export([dist_cntrlr_loop/4, spawn_dist_cntrlr/2]).
+-export([dist_cntrlr_loop/5, spawn_dist_cntrlr/2]).
 -include_lib("kernel/include/net_address.hrl").
 -include_lib("include/quic_util.hrl").
 
@@ -20,28 +20,28 @@ spawn_dist_cntrlr(Conn, Stream) ->
             [link, {priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
     spawn_opt(quic_dist_cntrlr,
               dist_cntrlr_loop,
-              [Conn, Stream, TickHandler, <<>>],
+              [Conn, Stream, TickHandler, <<>>, undefined],
               [{priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS).
 
 
-dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
+dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
     receive
         %% Set Pid as the connection supervisor, link with it and
         %% send the linking result back.
         {Ref, From, {supervisor, SupervisorPid}} ->
             Res = link(SupervisorPid),
             From ! {Ref, Res},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, SupervisorPid);
 
         %% Send the tick handler to the From process
         {Ref, From, tick_handler} ->
             From ! {Ref, TickHandler},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Send the stream to the From process
         {Ref, From, stream} ->
             From ! {Ref, Stream},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
         
         %% Send Packet onto the stream and send the result back
         {Ref, From, {send, Packet}} ->
@@ -56,11 +56,11 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
             PacketLen = byte_size(BinPacket),
             Res = quicer:send(Stream, <<PacketLen:16, BinPacket/binary>>),
             From ! {Ref, Res},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         {Ref, From, getll} ->
             From ! {Ref, {ok, self()}},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         {Ref, From, {address, Node}} ->
             Res = case quicer:peername(Conn) of
@@ -74,7 +74,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
                           end
                   end,
             From ! {Ref, Res},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Set the Socket options just before the connection is established
         %% for normal data traffic and before nodeup is delivered. A nodeup
@@ -87,7 +87,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
             %                    [{active, false},
             %                     {packet, 4}]),
             From ! {Ref, ok},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Set the Socket options just after the connection is established
         %% for normal data traffic and after nodeup is delivered.
@@ -99,7 +99,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
             %                    [{active, false},
             %                     {packet, 4}]),
             From ! {Ref, ok},
-            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc);
+            dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Receive a packet of Length bytes, within Timeout milliseconds
         {Ref, From, {recv, Length, Timeout}} ->
@@ -112,12 +112,12 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
                         if byte_size(Data) >= PacketLen ->
                             <<Packet:PacketLen/binary, Rest/binary>> = Data,
                             From ! {Ref, {ok, Packet}},
-                            dist_cntrlr_loop(Conn, Stream, TickHandler, Rest);
+                            dist_cntrlr_loop(Conn, Stream, TickHandler, Rest, Sup);
                         true ->
-                            dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc)
+                            dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc, Sup)
                         end;
                     true ->
-                        dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc)
+                        dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc, Sup)
                     end
             end;
         
@@ -133,7 +133,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
             InputHandler = spawn_opt(
                              fun() -> dist_controller_input_handler(DHandle,
                                                                     Stream,
-                                                                    nil)
+                                                                    Sup)
                              end,
                              [link] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
             quicer:controlling_process(Stream, InputHandler),
@@ -153,7 +153,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc) ->
 %% the socket.
 %% ---------------------------------------------------------------------
 dist_controller_input_handler(DHandle, Stream, Sup) ->
-    % link(Sup),
+    link(Sup),
     receive
         %% Wait for the input handler to be registered before starting
         %% to deliver incoming data.
