@@ -34,15 +34,15 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
             case true of
                 true  ->
                     dist_util:reset_timer(Timer),
-                    ?quic_debug({connecting, Ip2, Port}),
+                    ?qd_debug("~p", [{connecting, Ip2, Port}]),
                     case quicer:connect(Ip2, Port, [{alpn, ["sample"]}], 5000) of
                         {ok, Conn} ->
-                            ?quic_debug("Connected. Creating stream"),
+                            ?qd_debug("Connected. Creating stream"),
                             {ok, Stream} = quicer:start_stream(Conn, []),
-                            ?quic_debug("Sending random ping just to trigger creating stream"),
+                            ?qd_debug("Sending random ping just to trigger creating stream"),
                             {ok, 4} = quicer:send(Stream, <<"ping">>),
                             receive {quic, <<"pong">>, Stream, _, _, _} -> ok end,
-                            ?quic_debug("Received pong"),
+                            ?qd_debug("Received pong"),
                             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Conn, Stream),
                             quic_util:call_dist_ctrl(DistCtrl, {supervisor, self()}),
                             quic_util:flush_controller(DistCtrl, {Conn, Stream}),
@@ -58,7 +58,7 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                                                 this_flags = 0,
                                                 other_version = ?ERL_DIST_VER,
                                                 request_type = Type},
-                            ?quic_debug("Starting handshake"),
+                            ?qd_debug("Starting handshake"),
                             dist_util:handshake_we_started(HSData);
                         _Error ->
                             %% Other Node may have closed since

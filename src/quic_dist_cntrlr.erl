@@ -14,7 +14,7 @@
         [{message_queue_data, off_heap}, {fullsweep_after, 0}]).
 
 spawn_dist_cntrlr(Conn, Stream) ->
-    ?quic_debug("Running DistCntrlr loop"),
+    ?qd_debug("Running DistCntrlr loop"),
     TickHandler = spawn_opt(fun() -> tick_handler(Stream) end,
             %% Spawn on max priority
             [link, {priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
@@ -131,7 +131,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
             end;
         
         {Ref, From, {handshake_complete, _Node, DHandle}} ->
-            erlang:display("[DIST] Handshake completed!!!"),
+            ?qd_debug("Handshake completed!!!"),
             From ! {Ref, ok},
             %% Handshake complete! Begin dispatching traffic
 

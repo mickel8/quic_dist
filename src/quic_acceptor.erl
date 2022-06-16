@@ -5,16 +5,16 @@
 -include_lib("include/quic_util.hrl").
 
 acceptor_loop(Kernel, Listen) ->
-    ?quic_debug("Waiting for new connection"),
+    ?qd_debug("Waiting for new connection"),
     case quicer:accept(Listen, []) of
         {ok, Conn} ->
-            ?quic_debug("New connection, accepting"),
-            ?quic_debug("Performing QUIC handshake"),
+            ?qd_debug("New connection, accepting"),
+            ?qd_debug("Performing QUIC handshake"),
             {ok, Conn} = quicer:handshake(Conn, 5000),
-            ?quic_debug("Accepting stream"),
+            ?qd_debug("Accepting stream"),
             {ok, Stream} = quicer:accept_stream(Conn, []),
             receive {quic, <<"ping">>, Stream, _, _, _} -> ok end,
-            ?quic_debug("Received random ping. Responding with pong"),
+            ?qd_debug("Received random ping. Responding with pong"),
             {ok, 4} = quicer:send(Stream, <<"pong">>),
             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Conn, Stream),
             quic_util:flush_controller(DistCtrl, {Conn, Stream}),

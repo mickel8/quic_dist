@@ -21,7 +21,7 @@ supervisor_loop(Kernel, Acceptor, DistCtrl, MyNode, Allowed, SetupTime) ->
                                         timer = Timer,
                                         this_flags = 0,
                                         allowed = Allowed},
-                    ?quic_debug("Starting handshake"),
+                    ?qd_debug("Starting handshake"),
                     dist_util:handshake_other_started(HSData);
                 {false, _IP} ->
                     ?shutdown(no_node)

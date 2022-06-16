@@ -1,7 +1,9 @@
-%%-define(quic_dist_debug, true).
+%% Set to true to enable QUIC DIST debug logs 
+-define(qd_debug, true).
 
--ifdef(quic_dist_debug).
--define(quic_debug(Term), erlang:display(Term)).
+-ifdef(qd_debug).
+-define(qd_debug(Msg), io:format("[QUIC_DIST] ~s\n", [Msg])).
+-define(qd_debug(Fmt, Args), io:format("[QUIC_DIST] ~s\n", [io_lib:format(Fmt, Args)])).
 -else.
--define(quic_debug(Term), ok).
+-define(qd_debug(Fmt, Args), ok).
 -endif.

@@ -11,7 +11,7 @@ listen(Name) ->
     listen(Name, Host).
 
 listen(Name, Host) ->
-    ?quic_debug("Starting listening"),
+    ?qd_debug("Starting listening"),
     application:ensure_all_started(quicer),
     {_MinPort, _MaxPort} = get_port_range(),
     LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
@@ -45,7 +45,7 @@ address() ->
 
 accept(Listen) ->
     % priority max is enforced by Erlang documentation
-    ?quic_debug("Spawning Acceptor"),
+    ?qd_debug("Spawning Acceptor"),
     spawn_opt(quic_acceptor, acceptor_loop, [self(), Listen], [link, {priority, max}]).
 
 accept_connection(AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime) ->
@@ -55,7 +55,7 @@ accept_connection(AcceptorPid, DistCtrl, MyNode, Allowed, SetupTime) ->
               [link, {priority, max}]).
 
 setup(Node, Type, MyNode, LongOrShortNames, SetupTime) ->
-    ?quic_debug("Spawning connector"),
+    ?qd_debug("Spawning connector"),
     spawn_opt(quic_connector,
               connector_loop,
               [self(), Node, Type, MyNode, LongOrShortNames, SetupTime],
