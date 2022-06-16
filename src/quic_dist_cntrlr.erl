@@ -26,6 +26,15 @@ spawn_dist_cntrlr(Conn, Stream) ->
 
 dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
     receive
+        {quic, closed, Stream, 0} ->
+            exit(connection_closed);
+        {quic, closed, Stream, 1} ->
+            exit(connection_closed);
+        {quic, closed, Conn} ->
+            exit(connection_closed);
+        {quic, transport_shutdown, Conn, _Status} ->
+            exit(connection_closed);
+
         %% Set Pid as the connection supervisor, link with it and
         %% send the linking result back.
         {Ref, From, {supervisor, SupervisorPid}} ->
@@ -136,7 +145,9 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
                                                                     Sup)
                              end,
                              [link] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
+            quic_util:flush_controller(InputHandler, {Conn, Stream}),
             quicer:controlling_process(Stream, InputHandler),
+            quic_util:flush_controller(InputHandler, {Conn, Stream}),
             %% Register the input handler process
             erlang:dist_ctrl_input_handler(DHandle, InputHandler),
             InputHandler ! DHandle,

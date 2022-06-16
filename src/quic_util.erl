@@ -1,6 +1,6 @@
 -module(quic_util).
 
--export([call_dist_ctrl/2, hs_data_common/1, splitnode/2, split_node/3]).
+-export([call_dist_ctrl/2, flush_controller/2, hs_data_common/1, splitnode/2, split_node/3]).
 
 -include_lib("kernel/include/dist_util.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -15,6 +15,34 @@ call_dist_ctrl(DistCtrl, Msg) ->
             Res;
         {'DOWN', Ref, process, DistCtrl, Reason} ->
             exit({dist_controller_exit, Reason})
+    end.
+
+
+%% ---------------------------------------------------------------------
+%% Flush all the quic and quic closed received messages and transfer them
+%% to the Pid process. This is used when setting Pid as the new controlling
+%% process of QHandle. This function needs to be called twice: just before
+%% and right after calling controlling_process(QHandle, Pid).
+%% ---------------------------------------------------------------------
+flush_controller(Pid, {Conn, Stream} = QHandle) ->
+    receive 
+        {quic, _Data, Stream, _, _, _} = Msg ->
+            Pid ! Msg,
+            flush_controller(Pid, QHandle);
+        {quic, closed, Stream, 0} = Msg ->
+            Pid ! Msg,
+            flush_controller(Pid, QHandle);
+        {quic, closed, Stream, 1} = Msg ->
+            Pid ! Msg,
+            flush_controller(Pid, QHandle);
+        {quic, closed, Conn} = Msg ->
+            Pid ! Msg,
+            flush_controller(Pid, QHandle);
+        {quic, transport_shutdown, Conn, _Status} = Msg ->
+            Pid ! Msg,
+            flush_controller(Pid, QHandle)
+    after 0 ->
+        ok
     end.
 
 hs_data_common(DistCtrl) ->

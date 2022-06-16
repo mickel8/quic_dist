@@ -45,7 +45,9 @@ connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
                             ?quic_debug("Received pong"),
                             DistCtrl = quic_dist_cntrlr:spawn_dist_cntrlr(Conn, Stream),
                             quic_util:call_dist_ctrl(DistCtrl, {supervisor, self()}),
+                            quic_util:flush_controller(DistCtrl, {Conn, Stream}),
                             quicer:controlling_process(Stream, DistCtrl),
+                            quic_util:flush_controller(DistCtrl, {Conn, Stream}),
                             HSData0 = quic_util:hs_data_common(DistCtrl),
                             HSData =
                                 HSData0#hs_data{kernel_pid = Kernel,
