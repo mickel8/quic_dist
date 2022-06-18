@@ -15,7 +15,7 @@
 
 spawn_dist_cntrlr(Conn, Stream) ->
     ?qd_debug("Running DistCntrlr loop"),
-    TickHandler = spawn_opt(fun() -> tick_handler(Stream) end,
+    TickHandler = spawn_opt(fun() -> tick_handler({Conn, Stream}) end,
             %% Spawn on max priority
             [link, {priority, max}] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
     spawn_opt(quic_dist_cntrlr,
@@ -27,12 +27,16 @@ spawn_dist_cntrlr(Conn, Stream) ->
 dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
     receive
         {quic, closed, Stream, 0} ->
+            ?qd_debug("closed"),
             exit(connection_closed);
         {quic, closed, Stream, 1} ->
+            ?qd_debug("closed"),
             exit(connection_closed);
         {quic, closed, Conn} ->
+            ?qd_debug("closed"),
             exit(connection_closed);
         {quic, transport_shutdown, Conn, _Status} ->
+            ?qd_debug("transport shutdown"),
             exit(connection_closed);
 
         %% Set Pid as the connection supervisor, link with it and
@@ -47,9 +51,9 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
             From ! {Ref, TickHandler},
             dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
-        %% Send the stream to the From process
-        {Ref, From, stream} ->
-            From ! {Ref, Stream},
+        %% Send the QUIC handle to the From process
+        {Ref, From, qhandle} ->
+            From ! {Ref, {Conn, Stream}},
             dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
         
         %% Send Packet onto the stream and send the result back
@@ -63,7 +67,8 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
                 Packet
             end,
             PacketLen = byte_size(BinPacket),
-            Res = quicer:send(Stream, <<PacketLen:16, BinPacket/binary>>),
+            TotalLen = PacketLen + 2,
+            {ok, TotalLen} = Res = quicer:send(Stream, <<PacketLen:16, BinPacket/binary>>),
             From ! {Ref, Res},
             dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
@@ -141,7 +146,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
             %% simplifies the implementation.
             InputHandler = spawn_opt(
                              fun() -> dist_controller_input_handler(DHandle,
-                                                                    Stream,
+                                                                    {Conn, Stream},
                                                                     Sup)
                              end,
                              [link] ++ ?DIST_CNTRL_COMMON_SPAWN_OPTS),
@@ -163,13 +168,13 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
 %% Dispatch all traffic from the remote node coming to this node through
 %% the socket.
 %% ---------------------------------------------------------------------
-dist_controller_input_handler(DHandle, Stream, Sup) ->
+dist_controller_input_handler(DHandle, QHandle, Sup) ->
     link(Sup),
     receive
         %% Wait for the input handler to be registered before starting
         %% to deliver incoming data.
         DHandle ->
-            dist_controller_input_loop(DHandle, Stream, <<>>)
+            dist_controller_input_loop(DHandle, QHandle, <<>>)
     end.
 
 
@@ -179,21 +184,15 @@ dist_controller_input_handler(DHandle, Stream, Sup) ->
 %     inet:setopts(Socket, [{active, ?ACTIVE_INPUT - N}]),
 %     dist_controller_input_loop(DHandle, Socket, ?ACTIVE_INPUT);
 
-dist_controller_input_loop(DHandle, Stream, Acc) ->
+dist_controller_input_loop(DHandle, {Conn, Stream} = QHandle, Acc) ->
     receive
         %% In active mode, data packets are delivered as messages
-        {quic, Data, _, _, _, _} ->
+        {quic, Data, _, _, _, _} = X ->
             %% When data is received from the remote node, deliver it
             %% to the local node.
-            Acc2 = <<Acc/binary, Data/binary>>,
-            <<Len:32, Rest/binary>> = Acc2,
-            if byte_size(Rest) >= Len ->
-                <<Data2:Len/binary, Rest2/binary>> = Rest,
-                erlang:dist_ctrl_put_data(DHandle, Data2),
-                dist_controller_input_loop(DHandle, Stream, Rest2);
-            true ->
-                dist_controller_input_loop(DHandle, Stream, Acc2)
-            end;
+            ?qd_debug("IN: ~p", [X]),
+            NewAcc = put_data(DHandle, <<Acc/binary, Data/binary>>),
+            dist_controller_input_loop(DHandle, QHandle, NewAcc);
             % try erlang:dist_ctrl_put_data(DHandle, Data)
             % catch _ : _ -> death_row()
             % end,
@@ -202,12 +201,37 @@ dist_controller_input_loop(DHandle, Stream, Acc) ->
             % dist_controller_input_loop(DHandle, Stream);
 
         %% Connection to remote node terminated
-        % {tcp_closed, Socket} ->
-        %     exit(connection_closed);
+        {quic, closed, Stream, 0} ->
+            ?qd_debug("closed"),
+            exit(connection_closed);
+        {quic, closed, Stream, 1} ->
+            ?qd_debug("closed"),
+            exit(connection_closed);
+        {quic, closed, Conn} ->
+            ?qd_debug("closed"),
+            exit(connection_closed);
+        {quic, transport_shutdown, Conn, _Status} ->
+            ?qd_debug("transport shutdown"),
+            exit(connection_closed);
 
         %% Ignore all other messages
-        _ ->
-            dist_controller_input_loop(DHandle, Stream, Acc)
+        Other ->
+            ?qd_debug("[INPUT HANDLER] Got unknown msg: ~p. Ignoring.", [Other]),
+            dist_controller_input_loop(DHandle, QHandle, Acc)
+    end.
+
+put_data(DHandle, Data) ->
+    if byte_size(Data) >= 4 ->    
+        <<Len:32, Rest/binary>> = Data,
+        if byte_size(Rest) >= Len ->
+            <<Data2:Len/binary, Rest2/binary>> = Rest,
+            erlang:dist_ctrl_put_data(DHandle, Data2),
+            put_data(DHandle, Rest2);
+        true ->
+            Data
+        end;
+    true ->
+        Data
     end.
 
 %% ---------------------------------------------------------------------
@@ -225,8 +249,9 @@ dist_controller_output_handler(DHandle, Stream) ->
             end,
             dist_controller_output_handler(DHandle, Stream);
 
-        _ ->
+        Other ->
             %% Ignore all other messages
+            ?qd_debug("[OUTPUT HANDLER] Got unknown msg: ~p. Ignoring.", [Other]),
             dist_controller_output_handler(DHandle, Stream)
     end.
 
@@ -246,7 +271,9 @@ dist_controller_send_data(DHandle, Stream) ->
             end,
             DataLen = byte_size(RealData),
             LenPlusData = <<DataLen:32, RealData/binary>>,
-            quicer:send(Stream, LenPlusData),
+            TotalLen = DataLen + 4,
+            ?qd_debug("OUT: ~p", [LenPlusData]),
+            {ok, TotalLen} = quicer:send(Stream, LenPlusData),
             %% Loop as long as there is more data available to fetch
             dist_controller_send_data(DHandle, Stream)
     end.
@@ -281,12 +308,17 @@ death_row(Reason) ->
 %% The tick handler process writes a tick message to the socket when it
 %% receives a 'tick' request from the connection supervisor.
 %% ---------------------------------------------------------------------
-tick_handler(Stream) ->
+tick_handler({Conn, Stream} = QHandle) ->
     receive
         tick ->
-            %% May block due to busy port...
-            Res = quicer:send(Stream, "");
+            Stats = quicer:getstat(Conn, [recv_cnt, send_cnt, send_pend]),
+            ?qd_debug("Tick handler ~p", [Stats]),
+            %% Because ticks are sent after establishing the connection, 
+            %% we are simulating `{packet, 4}` option here.
+            %%
+            %% This is blocking
+            {ok, 4} = quicer:send(Stream, <<0:32>>);
         _ ->
             ok
     end,
-    tick_handler(Stream).
+    tick_handler(QHandle).

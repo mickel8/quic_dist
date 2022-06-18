@@ -47,7 +47,7 @@ flush_controller(Pid, {Conn, Stream} = QHandle) ->
 
 hs_data_common(DistCtrl) ->
     TickHandler = call_dist_ctrl(DistCtrl, tick_handler),
-    Stream = call_dist_ctrl(DistCtrl, stream),
+    QHandle = call_dist_ctrl(DistCtrl, qhandle),
     RejectFlags =
         case init:get_argument(quic_dist_reject_flags) of
             {ok, [[Flags]]} ->
@@ -62,18 +62,18 @@ hs_data_common(DistCtrl) ->
              f_getll = getll_fun(),
              f_handshake_complete = handshake_complete_fun(),
              f_address = address_fun(),
-             mf_setopts = setopts_fun(DistCtrl, Stream),
-             mf_getopts = getopts_fun(DistCtrl, Stream),
-             mf_getstat = getstat_fun(DistCtrl, Stream),
+             mf_setopts = setopts_fun(DistCtrl, QHandle),
+             mf_getopts = getopts_fun(DistCtrl, QHandle),
+             mf_getstat = getstat_fun(DistCtrl, QHandle),
              mf_tick = tick_fun(DistCtrl, TickHandler),
              reject_flags = RejectFlags}.
 
 tick_fun(DistCtrl, TickHandler) ->
     fun(Ctrl) when Ctrl == DistCtrl -> TickHandler ! tick end.
 
-getstat_fun(DistCtrl, Stream) ->
+getstat_fun(DistCtrl, {Conn, _Stream} = _QHandle) ->
     fun(Ctrl) when Ctrl == DistCtrl ->
-       case quicer:getstat(Stream, [recv_cnt, send_cnt, send_pend]) of
+       case quicer:getstat(Conn, [recv_cnt, send_cnt, send_pend]) of
            {ok, Stat} ->
                split_stat(Stat, 0, 0, 0);
            Error ->
