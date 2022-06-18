@@ -14,7 +14,7 @@ listen(Name, Host) ->
     ?qd_debug("Starting listening"),
     application:ensure_all_started(quicer),
     {_MinPort, _MaxPort} = get_port_range(),
-    LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
+    LOptions = [{cert, "/home/michal/Repos/qerldist/cert.pem"}, {key, "/home/michal/Repos/qerldist/key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
     
     {ok, LHandle} =
     if Name == 'x' ->
