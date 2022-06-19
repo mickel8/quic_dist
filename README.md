@@ -51,7 +51,7 @@ pong
 
 ## Architecture
 
-![](architecture.drawio.png)
+![](docs/architecture.drawio.png)
 
 ## Supported platforms
 
