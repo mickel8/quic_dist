@@ -19,23 +19,17 @@
 
 -import(error_logger, [error_msg/2]).
 
-connector_loop(Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
-    [_Name, Address] = quic_util:splitnode(Node, LongOrShortNames),
-    case inet:getaddr(Address, inet) of
-        {ok, _Ip} ->
-            Ip2 = 
-                if Node == 'x@michal' ->
-                    {127, 0, 0, 1};
-                true ->
-                    {127, 0, 0, 2}
-                end,
-            Port = 55555,
+connector_loop(Kernel, Node, Type, MyNode, _LongOrShortNames, SetupTime) ->
+    [Name, Host] = quic_util:splitnode(Node),
+    case inet:getaddr(Host, inet) of
+        {ok, Ip} ->
+            {Port, []} = string:to_integer(Name),
             Timer = dist_util:start_timer(SetupTime),
             case true of
                 true  ->
                     dist_util:reset_timer(Timer),
-                    ?qd_debug("~p", [{connecting, Ip2, Port}]),
-                    case quicer:connect(Ip2, Port, [{alpn, ["sample"]}], 5000) of
+                    ?qd_debug("~p", [{connecting, Ip, Port}]),
+                    case quicer:connect(Ip, Port, [{alpn, ["sample"]}], 5000) of
                         {ok, Conn} ->
                             ?qd_debug("Connected. Creating stream"),
                             {ok, Stream} = quicer:start_stream(Conn, []),

@@ -7,22 +7,16 @@
 -include_lib("include/quic_util.hrl").
 
 listen(Name) ->
-    {ok, Host} = inet:gethostname(),
-    listen(Name, Host).
+    listen(Name, "127.0.0.1").
 
 listen(Name, Host) ->
     ?qd_debug("Starting listening"),
     application:ensure_all_started(quicer),
     {_MinPort, _MaxPort} = get_port_range(),
+    L = Host ++ ":" ++ atom_to_list(Name),
     LOptions = [{cert, "cert.pem"}, {key, "key.pem"}, {alpn, ["sample"]}, {peer_bidi_stream_count, 20}],
-    
-    {ok, LHandle} =
-    if Name == 'x' ->
-        quicer:listen("127.0.0.1:55555", LOptions);
-    true ->
-        quicer:listen("127.0.0.2:55555", LOptions)
-    end,
-
+    ?qd_debug("Listening on ~p", [L]),
+    {ok, LHandle} = quicer:listen(L, LOptions),
     {ok, Address} = quicer:sockname(LHandle),
     NetAddress =
         #net_address{address = Address,

@@ -1,6 +1,6 @@
 -module(quic_util).
 
--export([call_dist_ctrl/2, flush_controller/2, hs_data_common/1, splitnode/2, split_node/3]).
+-export([call_dist_ctrl/2, flush_controller/2, hs_data_common/1, splitnode/1, split_node/3]).
 
 -include_lib("kernel/include/dist_util.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -150,37 +150,16 @@ handshake_complete_fun() ->
 
 
 %% If Node is illegal terminate the connection setup!!
-splitnode(Node, LongOrShortNames) ->
+splitnode(Node) ->
     case split_node(atom_to_list(Node), $@, []) of
         [Name | Tail] when Tail =/= [] ->
             Host = lists:append(Tail),
-            case split_node(Host, $., []) of
-                [_] when LongOrShortNames =:= longnames ->
-                    case inet:parse_address(Host) of
-                        {ok, _} ->
-                            [Name, Host];
-                        _ ->
-                            ?LOG_ERROR("** System running to use "
-                                      "fully qualified "
-                                      "hostnames **~n"
-                                      "** Hostname ~ts is illegal **~n",
-                                      [Host]),
-                            ?shutdown(Node)
-                    end;
-                L when length(L) > 1, LongOrShortNames =:= shortnames ->
-                    ?LOG_ERROR("** System NOT running to use fully qualified "
-                              "hostnames **~n"
-                              "** Hostname ~ts is illegal **~n",
-                              [Host]),
-                    ?shutdown(Node);
-                _ ->
-                    [Name, Host]
-            end;
+            [Name, Host];
         [_] ->
-            ?LOG_ERROR("** Nodename ~p illegal, no '@' character **~n", [Node]),
+            ?qd_debug("** Nodename ~p illegal, no '@' character **~n", [Node]),
             ?shutdown(Node);
         _ ->
-            ?LOG_ERROR("** Nodename ~p illegal **~n", [Node]),
+            ?qd_debug("** Nodename ~p illegal **~n", [Node]),
             ?shutdown(Node)
     end.
 

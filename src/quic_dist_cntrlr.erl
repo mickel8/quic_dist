@@ -116,7 +116,7 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
             dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Receive a packet of Length bytes, within Timeout milliseconds
-        {Ref, From, {recv, Length, Timeout}} ->
+        {Ref, From, {recv, _Length, _Timeout}} ->
             % TODO use Timeout
             receive
                 {quic, Msg, _, _, _, _} ->
