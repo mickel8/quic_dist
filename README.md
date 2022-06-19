@@ -16,7 +16,11 @@ EPMD cannot be used as it requires TCP.
 # shell 1
 
 $ ERL_FLAGS="-proto_dist quic -no_epmd -config sys" rebar3 shell
-1> net_kernel:start('5555@127.0.0.1', #{}).
+1> application:ensure_all_started(quic_dist).
+{ok,[quicer,quic_dist]}
+2> application:set_env([{quic_dist, [{cert, "/path/to/cert.pem"}, {key, "/path/to/key.pem"}]}]).
+ok
+3> net_kernel:start('5555@127.0.0.1', #{}).
 {ok,<0.182.0>}
 (5555@127.0.0.1)2> net_adm:ping('4444@127.0.0.1').
 pong
@@ -36,7 +40,11 @@ pong
 
 $ ERL_FLAGS="-proto_dist quic -no_epmd -config sys" rebar3 shell
 Eshell V13.0  (abort with ^G)
-1> net_kernel:start('4444@127.0.0.1', #{}).
+1> application:ensure_all_started(quic_dist).
+{ok,[quicer,quic_dist]}
+2> application:set_env([{quic_dist, [{cert, "/path/to/cert.pem"}, {key, "/path/to/key.pem"}]}]).
+ok
+3> net_kernel:start('4444@127.0.0.1', #{}).
 {ok,<0.182.0>}
 (4444@127.0.0.1)2> net_adm:ping('5555@127.0.0.1').
 pong
