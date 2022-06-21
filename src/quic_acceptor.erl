@@ -24,7 +24,7 @@ acceptor_loop(Kernel, Listen) ->
             receive
                 {Kernel, controller, SupervisorPid} ->
                     Ref = erlang:monitor(process, DistCtrl),
-                    DistCtrl ! {Ref, self(), {supervisor, SupervisorPid}},
+                    quic_util:call_dist_ctrl(DistCtrl, {supervisor, SupervisorPid}),
                     receive
                         {Ref, Res} ->
                             erlang:demonitor(Ref, [flush]),
