@@ -94,30 +94,20 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
         %% for normal data traffic and before nodeup is delivered. A nodeup
         %% message is delivered when a new node is connected.
         {Ref, From, pre_nodeup} ->
-            %% Switch the distribution protocol to a packet header of
-            %% 4 bytes which is used to store the length of each packet
-            %% sent over the streamed Unix Domain Sockets.
-            % Res = inet:setopts(Socket,
-            %                    [{active, false},
-            %                     {packet, 4}]),
+            %% As {packet, 2} and {packet, 4} options are simulated when
+            %% receiving data, we probably don't need to do anything here
             From ! {Ref, ok},
             dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Set the Socket options just after the connection is established
         %% for normal data traffic and after nodeup is delivered.
         {Ref, From, post_nodeup} ->
-            %% Switch the distribution protocol to a packet header of
-            %% 4 bytes, as explained above.
-            %% The previous pre_nodeup case should normally be enough.
-            % Res = inet:setopts(Socket,
-            %                    [{active, false},
-            %                     {packet, 4}]),
+            %% As above
             From ! {Ref, ok},
             dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup);
 
         %% Receive a packet of Length bytes, within Timeout milliseconds
-        {Ref, From, {recv, _Length, _Timeout}} ->
-            % TODO use Timeout
+        {Ref, From, {recv, _Length, Timeout}} ->
             receive
                 {quic, Msg, _, _, _, _} ->
                     NewAcc = <<RecvAcc/binary, Msg/binary>>,
@@ -133,6 +123,8 @@ dist_cntrlr_loop(Conn, Stream, TickHandler, RecvAcc, Sup) ->
                     true ->
                         dist_cntrlr_loop(Conn, Stream, TickHandler, NewAcc, Sup)
                     end
+            after Timeout ->
+                {error, timeout}
             end;
         
         {Ref, From, {handshake_complete, _Node, DHandle}} ->
@@ -263,7 +255,6 @@ dist_controller_send_data(DHandle, Stream) ->
             %% A dist_data message will be sent.
             erlang:dist_ctrl_get_data_notification(DHandle);
         Data ->
-            % stream_send(Stream, Data),
             RealData = if is_list(Data) ->
                 binary:list_to_bin(Data);
             true ->
@@ -308,11 +299,10 @@ death_row(Reason) ->
 %% The tick handler process writes a tick message to the socket when it
 %% receives a 'tick' request from the connection supervisor.
 %% ---------------------------------------------------------------------
-tick_handler({Conn, Stream} = QHandle) ->
+tick_handler({_Conn, Stream} = QHandle) ->
     receive
         tick ->
-            Stats = quicer:getstat(Conn, [recv_cnt, send_cnt, send_pend]),
-            ?qd_debug("Tick handler ~p", [Stats]),
+            ?qd_debug("Sending tick"),
             %% Because ticks are sent after establishing the connection, 
             %% we are simulating `{packet, 4}` option here.
             %%
