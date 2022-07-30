@@ -1,7 +1,7 @@
 {"1.2.0",
 [{<<"quicer">>,
   {git,"https://github.com/emqx/quic.git",
-       {ref,"562bf32e7241726b5c33da26bff5c59ab55f21a6"}},
+       {ref,"410bb2aef7bd726b5e7c91b703aa50268b638244"}},
   0},
  {<<"snabbkaffe">>,{pkg,<<"snabbkaffe">>,<<"1.0.1">>},1}]}.
 [
